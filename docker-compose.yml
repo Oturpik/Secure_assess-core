@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+  # PostgreSQL - Platform database
+  postgres:
+    image: postgres:15-alpine
+    container_name: scanner_postgres
+    environment:
+      POSTGRES_USER: scanner_user
+      POSTGRES_PASSWORD: scanner_pass
+      POSTGRES_DB: scanner_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scanner_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis - Caching and workspace lifecycle
+  redis:
+    image: redis:7-alpine
+    container_name: scanner_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # MongoDB - Scan results storage
+  mongodb:
+    image: mongo:7
+    container_name: scanner_mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: scanner_user
+      MONGO_INITDB_ROOT_PASSWORD: scanner_pass
+      MONGO_INITDB_DATABASE: scan_results
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # RabbitMQ - Message queue
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: scanner_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: scanner_user
+      RABBITMQ_DEFAULT_PASS: scanner_pass
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Service (we'll uncomment this after creating the Dockerfile)
+  # api:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: scanner_api
+  #   environment:
+  #     - DATABASE_URL=postgresql://scanner_user:scanner_pass@postgres:5432/scanner_platform
+  #     - REDIS_URL=redis://redis:6379/0
+  #     - MONGODB_URL=mongodb://scanner_user:scanner_pass@mongodb:27017/scan_results
+  #     - RABBITMQ_URL=amqp://scanner_user:scanner_pass@rabbitmq:5672/
+  #   ports:
+  #     - "8000:8000"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     mongodb:
+  #       condition: service_healthy
+  #     rabbitmq:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ./src:/app/src
+  #   command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  postgres_data:
+  redis_data:
+  mongodb_data:
+  rabbitmq_data:
